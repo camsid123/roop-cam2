@@ -37,8 +37,9 @@ In the event of violation of the legal and ethical requirements of the user's co
 
 Please refer to the [wiki](https://github.com/C0untFloyd/roop-unleashed/wiki).
 
-#### macOS
+#### macOS Installation
 Simply run the following command. It will check and install all dependencies if necessary.
+
 `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/PJF16/roop-unleashed/master/installer/macOSinstaller.sh)`
 
 
