@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This script checks and installs all dependencies which are needed to run roop-unleashed. After that, it clones the repo.
-# Execute this easily with /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/PJF16/roop-unleashed/master/macOSinstaller.sh)
+# Execute this easily with /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/PJF16/roop-unleashed/master/installer/macOSinstaller.sh)
 
 # Function to check if a command exists
 command_exists() {
