@@ -51,7 +51,7 @@ Simply run the following command. It will check and install all dependencies if 
 - macOS: `sh runMacOS.sh`
 - Dockerfile:
   ```shell
-  docker build -t roop-unleashed . && docker run \
+  docker build -t roop-unleashed . && docker run -t \
     -p 7860:7860 \
     -v ./config.yaml:/app/config.yaml \
     -v ./models:/app/models \
