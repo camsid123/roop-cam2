@@ -169,8 +169,6 @@ def update_status(message: str) -> None:
         call_display_ui(message)
 
 
-
-
 def start() -> None:
     if roop.globals.headless:
         print('Headless mode currently unsupported - starting UI!')
@@ -214,179 +212,33 @@ def live_swap(frame, options):
 #    if len(roop.globals.INPUT_FACESETS) <= selected_index:
 #        selected_index = 0
     process_mgr.initialize(roop.globals.INPUT_FACESETS, roop.globals.TARGET_FACES, options)
-    newframe = process_mgr.process_frame(frame)
-    if newframe is None:
-        return frame
-    return newframe
+    new_frame = process_mgr.process_frame(frame)
+    return new_frame
 
 
-def batch_process_regular(output_method, files:list[ProcessEntry], masking_engine:str, new_clip_text:str, use_new_method, imagemask, restore_original_mouth, num_swap_steps, progress, selected_index = 0) -> None:
-    global clip_text, process_mgr
-
-    release_resources()
-    limit_resources()
+def batch_process_regular(options, preview, mask_engine):
+    global process_mgr
     if process_mgr is None:
-        process_mgr = ProcessMgr(progress)
-    mask = imagemask["layers"][0] if imagemask is not None else None
-    if len(roop.globals.INPUT_FACESETS) <= selected_index:
-        selected_index = 0
-    options = ProcessOptions(get_processing_plugins(masking_engine), roop.globals.distance_threshold, roop.globals.blend_ratio,
-                              roop.globals.face_swap_mode, selected_index, new_clip_text, mask, num_swap_steps,
-                              roop.globals.subsample_size, False, restore_original_mouth)
+        process_mgr = ProcessMgr(options)
+
+    new_frame = None
+
     process_mgr.initialize(roop.globals.INPUT_FACESETS, roop.globals.TARGET_FACES, options)
-    batch_process(output_method, files, use_new_method)
-    return
-
-def batch_process_with_options(files:list[ProcessEntry], options, progress):
-    global clip_text, process_mgr
-
-    release_resources()
-    limit_resources()
-    if process_mgr is None:
-        process_mgr = ProcessMgr(progress)
-    process_mgr.initialize(roop.globals.INPUT_FACESETS, roop.globals.TARGET_FACES, options)
-    roop.globals.keep_frames = False
-    roop.globals.wait_after_extraction = False
-    roop.globals.skip_audio = False
-    batch_process("Files", files, True)
-
-
-
-def batch_process(output_method, files:list[ProcessEntry], use_new_method) -> None:
-    global clip_text, process_mgr
-
-    roop.globals.processing = True
-
-    # limit threads for some providers
-    max_threads = suggest_execution_threads()
-    if max_threads == 1:
-        roop.globals.execution_threads = 1
-
-    imagefiles:list[ProcessEntry] = []
-    videofiles:list[ProcessEntry] = []
-           
-    update_status('Sorting videos/images')
-
-
-    for index, f in enumerate(files):
-        fullname = f.filename
-        if util.has_image_extension(fullname):
-            destination = util.get_destfilename_from_path(fullname, roop.globals.output_path, f'.{roop.globals.CFG.output_image_format}')
-            destination = util.replace_template(destination, index=index)
-            pathlib.Path(os.path.dirname(destination)).mkdir(parents=True, exist_ok=True)
-            f.finalname = destination
-            imagefiles.append(f)
-
-        elif util.is_video(fullname) or util.has_extension(fullname, ['gif']):
-            destination = util.get_destfilename_from_path(fullname, roop.globals.output_path, f'__temp.{roop.globals.CFG.output_video_format}')
-            f.finalname = destination
-            videofiles.append(f)
-
-
-
-    if(len(imagefiles) > 0):
-        update_status('Processing image(s)')
-        origimages = []
-        fakeimages = []
-        for f in imagefiles:
-            origimages.append(f.filename)
-            fakeimages.append(f.finalname)
-
-        process_mgr.run_batch(origimages, fakeimages, roop.globals.execution_threads)
-        origimages.clear()
-        fakeimages.clear()
-
-    if(len(videofiles) > 0):
-        for index,v in enumerate(videofiles):
-            if not roop.globals.processing:
-                end_processing('Processing stopped!')
-                return
-            fps = v.fps if v.fps > 0 else util.detect_fps(v.filename)
-            if v.endframe == 0:
-                v.endframe = get_video_frame_total(v.filename)
-
-            is_streaming_only = output_method == "Virtual Camera"
-            if is_streaming_only == False:
-                update_status(f'Creating {os.path.basename(v.finalname)} with {fps} FPS...')
-
-            start_processing = time()
-            if is_streaming_only == False and roop.globals.keep_frames or not use_new_method:
-                util.create_temp(v.filename)
-                update_status('Extracting frames...')
-                ffmpeg.extract_frames(v.filename,v.startframe,v.endframe, fps)
-                if not roop.globals.processing:
-                    end_processing('Processing stopped!')
-                    return
-
-                temp_frame_paths = util.get_temp_frame_paths(v.filename)
-                process_mgr.run_batch(temp_frame_paths, temp_frame_paths, roop.globals.execution_threads)
-                if not roop.globals.processing:
-                    end_processing('Processing stopped!')
-                    return
-                if roop.globals.wait_after_extraction:
-                    extract_path = os.path.dirname(temp_frame_paths[0])
-                    util.open_folder(extract_path)
-                    input("Press any key to continue...")
-                    print("Resorting frames to create video")
-                    util.sort_rename_frames(extract_path)                                    
-                
-                ffmpeg.create_video(v.filename, v.finalname, fps)
-                if not roop.globals.keep_frames:
-                    util.delete_temp_frames(temp_frame_paths[0])
-            else:
-                if util.has_extension(v.filename, ['gif']):
-                    skip_audio = True
-                else:
-                    skip_audio = roop.globals.skip_audio
-                process_mgr.run_batch_inmem(output_method, v.filename, v.finalname, v.startframe, v.endframe, fps,roop.globals.execution_threads)
-                
-            if not roop.globals.processing:
-                end_processing('Processing stopped!')
-                return
-            
-            video_file_name = v.finalname
-            if os.path.isfile(video_file_name):
-                destination = ''
-                if util.has_extension(v.filename, ['gif']):
-                    gifname = util.get_destfilename_from_path(v.filename, roop.globals.output_path, '.gif')
-                    destination = util.replace_template(gifname, index=index)
-                    pathlib.Path(os.path.dirname(destination)).mkdir(parents=True, exist_ok=True)
-
-                    update_status('Creating final GIF')
-                    ffmpeg.create_gif_from_video(video_file_name, destination)
-                    if os.path.isfile(destination):
-                        os.remove(video_file_name)
-                else:
-                    skip_audio = roop.globals.skip_audio
-                    destination = util.replace_template(video_file_name, index=index)
-                    pathlib.Path(os.path.dirname(destination)).mkdir(parents=True, exist_ok=True)
-
-                    if not skip_audio:
-                        ffmpeg.restore_audio(video_file_name, v.filename, v.startframe, v.endframe, destination)
-                        if os.path.isfile(destination):
-                            os.remove(video_file_name)
-                    else:
-                        shutil.move(video_file_name, destination)
-
-            elif is_streaming_only == False:
-                update_status(f'Failed processing {os.path.basename(v.finalname)}!')
-            elapsed_time = time() - start_processing
-            average_fps = (v.endframe - v.startframe) / elapsed_time
-            update_status(f'\nProcessing {os.path.basename(destination)} took {elapsed_time:.2f} secs, {average_fps:.2f} frames/s')
-    end_processing('Finished')
-
-
-def end_processing(msg:str):
-    update_status(msg)
-    roop.globals.target_folder_path = None
-    release_resources()
+    
+    # Process all frames here
+    # for frame in roop.globals.input_video_reader:
+    #     new_frame = process_mgr.process_frame(frame)
+    
+    # if preview:
+    #     return new_frame
+    
+    process_mgr.release_resources()
 
 
 def destroy() -> None:
-    if roop.globals.target_path:
-        util.clean_temp(roop.globals.target_path)
-    release_resources()        
-    sys.exit()
+    print('Application terminated!')
+    release_resources()
+    exit(0)
 
 
 def run() -> None:
@@ -399,6 +251,8 @@ def run() -> None:
     roop.globals.video_encoder = roop.globals.CFG.output_video_codec
     roop.globals.video_quality = roop.globals.CFG.video_quality
     roop.globals.max_memory = roop.globals.CFG.memory_limit if roop.globals.CFG.memory_limit > 0 else None
-    if roop.globals.startup_args.server_share:
-        roop.globals.CFG.server_share = True
-    main.run()
+    
+    # Check if server_share is enabled and pass it to main.run()
+    server_share = roop.globals.startup_args.server_share
+    main.run(share=server_share)  # Pass the share argument
+    
