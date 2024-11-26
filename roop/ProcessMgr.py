@@ -396,7 +396,7 @@ class ProcessMgr():
 
     def swap_faces(self, frame, temp_frame):
         num_faces_found = 0
-
+        import random
         if self.options.swap_mode == "first":
             face = get_first_face(frame)
 
@@ -424,6 +424,19 @@ class ProcessMgr():
                         temp_frame = self.process_face(i, face, temp_frame)
                     else:
                         break
+                        
+           
+
+            elif self.options.swap_mode == "random_input":
+                for face in faces:
+                    num_faces_found += 1
+                    # Randomly choose an index from the list of input faces
+                    if self.input_face_datas:
+                       random_index = random.randint(0, len(self.input_face_datas) - 1)
+                       temp_frame = self.process_face(random_index, face, temp_frame)
+                    else:
+                        break
+
             
             elif self.options.swap_mode == "selected":
                 num_targetfaces = len(self.target_face_datas) 
